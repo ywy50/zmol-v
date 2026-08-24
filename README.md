@@ -27,7 +27,37 @@ Build and run the tests:
 zig build test --summary all
 ```
 
+From another language, through the C ABI:
+
+```bash
+zig build
+```
+
+```python
+import ctypes
+
+lib = ctypes.CDLL("zig-out/lib/libzmolv.so")
+lib.zmolv_encode.restype = ctypes.c_int
+```
+
 Everything below is detail.
+
+## The C ABI
+
+`zig build` also produces `libzmolv.so` (`.dylib`, `.dll`) exporting two
+functions, for callers that are not Zig:
+
+```c
+int  zmolv_encode(const uint8_t *spirv, size_t len, uint8_t **out, size_t *out_len);
+void zmolv_free(uint8_t *ptr, size_t len);
+```
+
+`zmolv_encode` returns 0 on success and writes a freshly allocated buffer
+through `out`, which the caller releases with `zmolv_free`. Non-zero is
+1 = not SPIR-V, 2 = malformed, 3 = out of memory.
+
+There is a C ABI rather than a command-line tool because it is the one
+interface that does not move between Zig releases.
 
 ## What this is
 
