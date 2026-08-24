@@ -1,0 +1,7 @@
+.{
+    .name = .zmolv,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .fingerprint = 0x8fa95c12f70a9bab,
+    .paths = .{ "build.zig", "build.zig.zon", "src", "tools", "README.md", "LICENSE" },
+}
