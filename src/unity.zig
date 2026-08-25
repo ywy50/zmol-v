@@ -15,8 +15,12 @@ pub const platform_vulkan: u32 = 18;
 pub const program_vulkan: u32 = 25;
 /// Section A's header is this long in every record examined.
 pub const section_header_size: u32 = 176;
-/// The version-and-flags word every stock record starts with.
-pub const container_version: u32 = 0x02000061;
+/// The version-and-flags word every stock record starts with. Measured
+/// `0x02000060` across every code record of VertexLit, Diffuse, Bumped
+/// Diffuse, Specular, Particles/Additive and Transparent/* — the earlier
+/// `0x02000061` in this file came from the pipeline's first survey and was
+/// wrong.
+pub const container_version: u32 = 0x02000060;
 
 /// The six-word size table that opens a Vulkan record's payload.
 ///
@@ -126,6 +130,44 @@ pub const globals_offsets_are_per_record = true;
 /// disproved that. Write zero and move on — the record's acceptance depends on
 /// the bind-channels block above, not on this.
 pub const hash_field_is_validated = false;
+
+/// The parameter record's entry index is `(stage << 24) | (kind << 16) | slot`.
+///
+/// A Vulkan blob opens with one or more **parameter** records (program types 2
+/// and 3 in the record table) that declare the buffers, textures and bindings
+/// the material binder keys on, followed by the code record(s). Each entry
+/// carries an index that is **not** a plain slot: measured across every stock
+/// parameter record in the installed game, the index encodes the binding
+/// program's stage in the top byte, a kind byte, and the slot in the low 16
+/// bits:
+///
+/// ```text
+/// stage  0x04 = vertex program   0x08 = fragment program
+/// kind   0x01 = constant buffer  0x00 = texture
+/// ```
+///
+/// | entry | stage | kind | slot | index |
+/// |---|---|---|---|---|
+/// | `_MainTex` (texture) | 0x08 | 0x00 | 0 | `0x08000000` |
+/// | `VGlobals` in a vertex record (cbuffer) | 0x04 | 0x01 | 0 | `0x04010000` |
+/// | `VGlobals` in a fragment record (cbuffer) | 0x04 | 0x01 | 1 | `0x04010001` |
+/// | `PGlobals` (cbuffer) | 0x08 | 0x01 | 0 | `0x08010000` |
+///
+/// Constant-buffer entries carry `array_size 0` (the third word of the
+/// binding entry); a writer that emitted plain slot indices with array size 1
+/// saw its Vulkan draw fault on AMD RADV — device lost, no log line — with
+/// every other dimension of the record stock-shaped. The entries are what the
+/// material binder keys on; the module's own descriptor sets/bindings (set 1
+/// for constant buffers, set 0 for textures) are derived from the modules, so
+/// the two conventions coexist.
+pub const param_entry_index_stage_vertex: u32 = 0x04;
+pub const param_entry_index_stage_fragment: u32 = 0x08;
+pub const param_entry_index_kind_cbuffer: u32 = 0x01;
+pub const param_entry_index_kind_texture: u32 = 0x00;
+pub const param_entry_texture_slot0: u32 = 0x08000000;
+pub const param_entry_vglobals_vertex_record: u32 = 0x04010000;
+pub const param_entry_vglobals_fragment_record: u32 = 0x04010001;
+pub const param_entry_pglobals: u32 = 0x08010000;
 
 test "the size table is six words, as the container expects" {
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(Header));
