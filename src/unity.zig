@@ -76,12 +76,47 @@ pub const storage_class_uniform: u32 = 2; // constant buffers
 ///
 /// Layout: `u32 source_mask`, `u32 count`, then `count` × `(u32 source, u32
 /// target)`. `source` is the mesh channel (bit 0 Position, 1 Normal, 4
-/// TexCoord0, …); `target` is the **SPIR-V input Location**, not the d3d11
-/// vertex-component slot. Stock `VertexLit` reads mask `19` (Position, Normal,
-/// TexCoord0), count `3`, pairs `(0,13) (1,14) (4,15)`. Reusing the d3d11 slot
-/// targets instead of the SPIR-V locations feeds the vertex shader the wrong
-/// stream and hangs the client mid-draw.
+/// TexCoord0, …); `target` is the attribute's slot in the program's
+/// vertex-input declaration **plus 13** — **not** the SPIR-V `Location` as
+/// stored in the module and not the d3d11 vertex-component slot. Measured
+/// across seven stock shaders (VertexLit, Diffuse, Specular, Transparent/*,
+/// Bumped Diffuse, Particles/Additive): the module's inputs are decorated
+/// `Location 0, 1, 2, …` in declaration order while the bind record carries
+/// the same order offset by 13:
+///
+/// ```text
+/// VertexLit / Diffuse (Position, Normal, TexCoord0)      (0,13) (1,14) (4,15)
+/// Bumped Diffuse (Position, Normal, Tangent, TexCoord0)  (0,13) (1,14) (2,15) (4,16)
+/// Particles/Additive (Position, Color, TexCoord0)        (0,13) (3,14) (4,15)
+/// ```
+///
+/// An earlier revision of this file called the target the SPIR-V input
+/// location; that was wrong — the stock modules' locations are 0, 1, 2 while
+/// their targets are 13, 14, 15. The runtime reconciles the two (the pipeline
+/// is built from the bind record and the module's declared inputs together),
+/// so a writer must emit the declaration-slot-plus-13 convention, not the
+/// module's own locations.
 pub const BindChannel = struct { source: u32, target: u32 };
+
+/// Every stock fragment module is one **combined** image-sampler.
+///
+/// All six measured stock fragment modules declare their texture as a single
+/// `OpTypeSampledImage` variable at descriptor set 0, binding 0, because Unity
+/// compiles its Vulkan modules with glslang from the GLSL its HLSLCC emits,
+/// where `uniform sampler2D` is one object. Compiling HLSL (`Texture2D` +
+/// `SamplerState`) makes glslang emit an image **and** a sampler as two
+/// variables on the same binding — a shape no stock module carries. Author the
+/// Vulkan fragment in GLSL 450 with `layout(binding = 0) uniform sampler2D`
+/// and compile it with glslang in GLSL mode (no `-D`).
+pub const fragment_sampler_is_combined = true;
+
+/// The `VGlobals`/`PGlobals` member offsets are per-record, not a fixed engine
+/// layout. `unity_ObjectToWorld` sits at 0 in Diffuse and Particles/Additive
+/// but 256 in VertexLit; `unity_MatrixVP` at 64, 128, 144 or 528 across the
+/// same set. The runtime fills each record's globals buffer at the offsets its
+/// own parameter record declares, so a writer chooses its own member offsets
+/// and declares them consistently in the parameter record and the module.
+pub const globals_offsets_are_per_record = true;
 
 /// The 32-byte field at payload words 20..27 is **not validated**.
 ///
