@@ -64,6 +64,34 @@ pub const set_constant_buffers: u32 = 1;
 pub const storage_class_uniform_constant: u32 = 0; // images, samplers
 pub const storage_class_uniform: u32 = 2; // constant buffers
 
+/// The `ParserBindChannels` block a Vulkan **code** record carries after its
+/// SMOL-V payload — the same structure a d3d11 vertex record ends with.
+///
+/// A record without it is refused: the shader loads, `Shader.isSupported` is
+/// true, and the prop draws in the magenta error shader with no log line. This
+/// was the real reason a hand-built Vulkan record was rejected; it was found by
+/// byte-diffing against a stock record carrying the same modules — they matched
+/// exactly but for the (unvalidated) hash, and stock was 32 bytes longer: this
+/// block.
+///
+/// Layout: `u32 source_mask`, `u32 count`, then `count` × `(u32 source, u32
+/// target)`. `source` is the mesh channel (bit 0 Position, 1 Normal, 4
+/// TexCoord0, …); `target` is the **SPIR-V input Location**, not the d3d11
+/// vertex-component slot. Stock `VertexLit` reads mask `19` (Position, Normal,
+/// TexCoord0), count `3`, pairs `(0,13) (1,14) (4,15)`. Reusing the d3d11 slot
+/// targets instead of the SPIR-V locations feeds the vertex shader the wrong
+/// stream and hangs the client mid-draw.
+pub const BindChannel = struct { source: u32, target: u32 };
+
+/// The 32-byte field at payload words 20..27 is **not validated**.
+///
+/// Corrupting every byte of it in an otherwise-untouched stock Vulkan blob
+/// still renders (measured 2026-08-25). It looks like a `Hash128` and earlier
+/// analysis concluded it was checked; a controlled corrupt-and-load experiment
+/// disproved that. Write zero and move on — the record's acceptance depends on
+/// the bind-channels block above, not on this.
+pub const hash_field_is_validated = false;
+
 test "the size table is six words, as the container expects" {
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(Header));
 }
