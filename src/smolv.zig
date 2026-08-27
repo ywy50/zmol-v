@@ -372,10 +372,62 @@ test "encodes a vertex shader exactly as the reference C++ does" {
     );
 }
 
+test "encode rejects SPIR-V with instruction length exceeding module bounds" {
+    const allocator = std.testing.allocator;
+    // Valid five-word header, then one word whose length field (top 16 bits)
+    // claims 1000 words — far past the module end.
+    const bad: [6]u32 = .{
+        spirv_magic,
+        0x00010000,
+        0,
+        1,
+        0,
+        (1000 << 16) | 1, // length=1000, opcode=1 (Undef)
+    };
+    const bytes = std.mem.sliceAsBytes(&bad);
+    try std.testing.expectError(Error.Malformed, encode(allocator, bytes));
+}
+
+test "encode rejects SPIR-V with zero-length instruction" {
+    const allocator = std.testing.allocator;
+    const bad: [6]u32 = .{
+        spirv_magic,
+        0x00010000,
+        0,
+        1,
+        0,
+        (0 << 16) | 1, // length=0, opcode=1 — length < 1 is Malformed
+    };
+    const bytes = std.mem.sliceAsBytes(&bad);
+    try std.testing.expectError(Error.Malformed, encode(allocator, bytes));
+}
+
 test "the header records the size the module decodes back to" {
     const spirv = @embedFile("testdata/unlit_vertex.spv");
     const encoded = try encode(std.testing.allocator, spirv);
     defer std.testing.allocator.free(encoded);
     try std.testing.expectEqual(@as(u32, spirv.len), try decodedSize(encoded));
     try std.testing.expect(encoded.len < spirv.len / 2); // it is meant to be smaller
+}
+
+test "decodedSize rejects input shorter than 24 bytes" {
+    try std.testing.expectError(Error.Malformed, decodedSize(&[_]u8{0} ** 20));
+}
+
+test "decodedSize rejects input with wrong magic" {
+    var buf: [24]u8 = [_]u8{0} ** 24;
+    std.mem.writeInt(u32, buf[0..4], 0xDEADBEEF, .little);
+    std.mem.writeInt(u32, buf[20..24], 1234, .little);
+    try std.testing.expectError(Error.Malformed, decodedSize(&buf));
+}
+
+test "encode rejects empty input" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectError(Error.NotSpirv, encode(allocator, &[_]u8{}));
+}
+
+test "encode rejects 20-byte zero block (passes length check, fails magic)" {
+    const allocator = std.testing.allocator;
+    const too_short: [20]u8 = [_]u8{0} ** 20;
+    try std.testing.expectError(Error.NotSpirv, encode(allocator, &too_short));
 }
