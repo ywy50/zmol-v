@@ -154,11 +154,6 @@ fn varRest(op: u16) bool {
     return op < table.known_ops and table.op_data[op].var_rest;
 }
 
-const MemberDecorateResult = struct {
-    next_index: usize,
-    count: u32,
-};
-
 fn encodeMemberDecorates(
     words: []const u32,
     word_count: usize,
@@ -166,7 +161,7 @@ fn encodeMemberDecorates(
     out: *Out,
     decoration_type: u32,
     start: usize,
-) Error!MemberDecorateResult {
+) Error!usize {
     var member_at = start;
     var prev_index: u32 = 0;
     var prev_offset: u32 = 0;
@@ -208,7 +203,7 @@ fn encodeMemberDecorates(
         count += 1;
     }
     out.items[count_at] = @intCast(count);
-    return .{ .next_index = member_at, .count = count };
+    return member_at;
 }
 
 /// Encode a SPIR-V module into SMOL-V. The caller owns the returned slice.
@@ -290,7 +285,7 @@ pub fn encode(allocator: std.mem.Allocator, spirv: []const u8) Error![]u8 {
         if (op == op_member_decorate) {
             const decoration_type = words[i + ioffs - 1];
             const result = try encodeMemberDecorates(words, word_count, allocator, &out, decoration_type, i);
-            i = result.next_index;
+            i = result;
             continue;
         }
 
