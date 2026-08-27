@@ -154,6 +154,63 @@ fn varRest(op: u16) bool {
     return op < table.known_ops and table.op_data[op].var_rest;
 }
 
+const MemberDecorateResult = struct {
+    next_index: usize,
+    count: u32,
+};
+
+fn encodeMemberDecorates(
+    words: []const u32,
+    word_count: usize,
+    allocator: std.mem.Allocator,
+    out: *Out,
+    decoration_type: u32,
+    start: usize,
+) Error!MemberDecorateResult {
+    var member_at = start;
+    var prev_index: u32 = 0;
+    var prev_offset: u32 = 0;
+    const count_at = out.items.len;
+    try out.append(allocator, 0);
+    var count: u32 = 0;
+    while (member_at < word_count and count < 255) {
+        const member_len = words[member_at] >> 16;
+        if (member_len < 1 or member_at + member_len > word_count) return Error.Malformed;
+        const member_op: u16 = @truncate(words[member_at] & 0xFFFF);
+        if (member_op != op_member_decorate) break;
+        if (member_len < 4) return Error.Malformed;
+        if (words[member_at + 1] != decoration_type) break;
+
+        const member_index = words[member_at + 2];
+        try writeVarint(out, allocator, member_index -% prev_index);
+        prev_index = member_index;
+
+        const member_dec = words[member_at + 3];
+        try writeVarint(out, allocator, member_dec);
+        const known_extra = decorationExtraOps(member_dec);
+        if (known_extra == -1) {
+            try writeVarint(out, allocator, member_len - 4);
+        } else if (@as(u32, @intCast(known_extra)) + 4 != member_len) {
+            return Error.Malformed;
+        }
+
+        if (member_dec == decoration_offset) {
+            if (member_len != 5) return Error.Malformed;
+            try writeVarint(out, allocator, words[member_at + 4] -% prev_offset);
+            prev_offset = words[member_at + 4];
+        } else {
+            var k: u32 = 4;
+            while (k < member_len) : (k += 1) {
+                try writeVarint(out, allocator, words[member_at + k]);
+            }
+        }
+        member_at += member_len;
+        count += 1;
+    }
+    out.items[count_at] = @intCast(count);
+    return .{ .next_index = member_at, .count = count };
+}
+
 /// Encode a SPIR-V module into SMOL-V. The caller owns the returned slice.
 pub fn encode(allocator: std.mem.Allocator, spirv: []const u8) Error![]u8 {
     if (spirv.len % 4 != 0 or spirv.len < 5 * 4) return Error.NotSpirv;
@@ -232,49 +289,8 @@ pub fn encode(allocator: std.mem.Allocator, spirv: []const u8) Error![]u8 {
         // indices, is encoded as a single counted bunch.
         if (op == op_member_decorate) {
             const decoration_type = words[i + ioffs - 1];
-            var member_at = i;
-            var prev_index: u32 = 0;
-            var prev_offset: u32 = 0;
-            const count_at = out.items.len;
-            try out.append(allocator, 0);
-            var count: u32 = 0;
-            while (member_at < word_count and count < 255) {
-                const member_len = words[member_at] >> 16;
-                if (member_len < 1 or member_at + member_len > word_count) return Error.Malformed;
-                const member_op: u16 = @truncate(words[member_at] & 0xFFFF);
-                if (member_op != op_member_decorate) break;
-                if (member_len < 4) return Error.Malformed;
-                if (words[member_at + 1] != decoration_type) break;
-
-                const member_index = words[member_at + 2];
-                try writeVarint(&out, allocator, member_index -% prev_index);
-                prev_index = member_index;
-
-                const member_dec = words[member_at + 3];
-                try writeVarint(&out, allocator, member_dec);
-                const known_extra = decorationExtraOps(member_dec);
-                if (known_extra == -1) {
-                    try writeVarint(&out, allocator, member_len - 4);
-                } else if (@as(u32, @intCast(known_extra)) + 4 != member_len) {
-                    return Error.Malformed;
-                }
-
-                if (member_dec == decoration_offset) {
-                    // Offsets are usually linearly increasing: write the delta.
-                    if (member_len != 5) return Error.Malformed;
-                    try writeVarint(&out, allocator, words[member_at + 4] -% prev_offset);
-                    prev_offset = words[member_at + 4];
-                } else {
-                    var k: u32 = 4;
-                    while (k < member_len) : (k += 1) {
-                        try writeVarint(&out, allocator, words[member_at + k]);
-                    }
-                }
-                member_at += member_len;
-                count += 1;
-            }
-            out.items[count_at] = @intCast(count);
-            i = member_at;
+            const result = try encodeMemberDecorates(words, word_count, allocator, &out, decoration_type, i);
+            i = result.next_index;
             continue;
         }
 
