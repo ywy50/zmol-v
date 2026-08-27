@@ -45,7 +45,7 @@ def main(argv: list[str]) -> int:
         "pub const op_data = [_]OpData{",
     ]
     for row, name in zip(rows, names, strict=True):
-        flag = lambda v: "true" if int(v) else "false"  # noqa: E731
+        flag = lambda v: "true" if int(v) else "false"
         out.append(
             f"    .{{ .has_result = {flag(row[0])}, .has_type = {flag(row[1])}, "
             f".delta_from_result = {row[2]}, .var_rest = {flag(row[3])} }}, // {name}"
