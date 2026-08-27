@@ -88,25 +88,33 @@ fn zigEncode(value: u32) u32 {
 /// Swap the most common opcodes into the smallest enum slots, so the combined
 /// length+opcode word usually fits in a single varint byte.
 fn remapOp(op: u16) u16 {
-    const pairs = [_][2]u16{
-        .{ op_decorate, op_nop },
-        .{ op_load, op_undef },
-        .{ op_store, op_source_continued },
-        .{ op_access_chain, op_source },
-        .{ op_vector_shuffle, op_source_extension },
-        .{ op_member_decorate, op_string },
-        .{ op_label, op_line },
-        .{ op_variable, 9 },
-        .{ op_f_mul, op_extension },
-        .{ op_f_add, op_ext_inst_import },
-        .{ op_type_pointer, op_memory_model },
-        .{ op_f_negate, op_entry_point },
+    return switch (op) {
+        op_decorate => op_nop,
+        op_nop => op_decorate,
+        op_load => op_undef,
+        op_undef => op_load,
+        op_store => op_source_continued,
+        op_source_continued => op_store,
+        op_access_chain => op_source,
+        op_source => op_access_chain,
+        op_vector_shuffle => op_source_extension,
+        op_source_extension => op_vector_shuffle,
+        op_member_decorate => op_string,
+        op_string => op_member_decorate,
+        op_label => op_line,
+        op_line => op_label,
+        op_variable => @as(u16, 9),
+        @as(u16, 9) => op_variable,
+        op_f_mul => op_extension,
+        op_extension => op_f_mul,
+        op_f_add => op_ext_inst_import,
+        op_ext_inst_import => op_f_add,
+        op_type_pointer => op_memory_model,
+        op_memory_model => op_type_pointer,
+        op_f_negate => op_entry_point,
+        op_entry_point => op_f_negate,
+        else => op,
     };
-    for (pairs) |pair| {
-        if (op == pair[0]) return pair[1];
-        if (op == pair[1]) return pair[0];
-    }
-    return op;
 }
 
 /// Instruction lengths have a known minimum per opcode; subtracting it keeps
@@ -220,6 +228,7 @@ pub fn encode(allocator: std.mem.Allocator, spirv: []const u8) Error![]u8 {
 
     var out: Out = .empty;
     errdefer out.deinit(allocator);
+    try out.ensureTotalCapacity(allocator, spirv.len);
 
     // The header mirrors SPIR-V's, with a different magic, the SMOL-V encoding
     // version folded into the top byte of the version word, and the decoded
