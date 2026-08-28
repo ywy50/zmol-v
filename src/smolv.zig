@@ -137,11 +137,13 @@ fn writeLengthOp(out: *Out, allocator: std.mem.Allocator, len_in: u32, op_in: u1
     // shuffle shorter than 4 words, whose adjustment above wrapped around.
     if (len > 0xFFFF) return Error.Malformed;
     const op: u32 = remapOp(op_in);
-    try writeVarint(out, allocator, ((len >> 4) << 20) | ((op >> 4) << 8) | ((len & 0xF) << 4) | (op & 0xF));
+    const word: u32 = ((len >> 4) << 20) | ((op >> 4) << 8) | ((len & 0xF) << 4) | (op & 0xF);
+    try writeVarint(out, allocator, word);
 }
 
 fn decorationExtraOps(decoration: u32) i32 {
-    if (decoration == 0 or (decoration >= 2 and decoration <= 5)) return 0; // RelaxedPrecision, Block..ColMajor
+    // RelaxedPrecision, Block..ColMajor
+    if (decoration == 0 or (decoration >= 2 and decoration <= 5)) return 0;
     if (decoration >= 29 and decoration <= 37) return 1; // Stream..XfbStride
     return -1; // unknown: the length is written out
 }
@@ -164,7 +166,6 @@ fn varRest(op: u16) bool {
 
 fn encodeMemberDecorates(
     words: []const u32,
-    word_count: usize,
     allocator: std.mem.Allocator,
     out: *Out,
     decoration_type: u32,
@@ -176,9 +177,9 @@ fn encodeMemberDecorates(
     const count_at = out.items.len;
     try out.append(allocator, 0);
     var count: u32 = 0;
-    while (member_at < word_count and count < 255) {
+    while (member_at < words.len and count < 255) {
         const member_len = words[member_at] >> 16;
-        if (member_len < 1 or member_at + member_len > word_count) return Error.Malformed;
+        if (member_len < 1 or member_at + member_len > words.len) return Error.Malformed;
         const member_op: u16 = @truncate(words[member_at] & 0xFFFF);
         if (member_op != op_member_decorate) break;
         if (member_len < 4) return Error.Malformed;
@@ -293,7 +294,7 @@ pub fn encode(allocator: std.mem.Allocator, spirv: []const u8) Error![]u8 {
         // indices, is encoded as a single counted bunch.
         if (op == op_member_decorate) {
             const decoration_type = words[i + ioffs - 1];
-            const result = try encodeMemberDecorates(words, word_count, allocator, &out, decoration_type, i);
+            const result = try encodeMemberDecorates(words, allocator, &out, decoration_type, i);
             i = result;
             continue;
         }
