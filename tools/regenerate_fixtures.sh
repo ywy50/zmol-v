@@ -42,4 +42,4 @@ for spv in src/testdata/*.spv; do
     "$work/oracle" "$spv" "${spv%.spv}.smolv"
 done
 
-"$work/../generate_table.py" "$work/smolv.cpp" 2>/dev/null || python3 tools/generate_table.py "$work/smolv.cpp"
+python3 tools/generate_table.py "$work/smolv.cpp"
