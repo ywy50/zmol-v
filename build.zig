@@ -38,7 +38,17 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    const c_api_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/c_api.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
     test_step.dependOn(&b.addRunArtifact(unity_tests).step);
+    test_step.dependOn(&b.addRunArtifact(c_api_tests).step);
 }

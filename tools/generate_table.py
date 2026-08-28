@@ -26,8 +26,8 @@ def main(argv: list[str]) -> int:
         r'"([^"]*)"',
         source.split("static const char* kSpirvOpNames[] =", 1)[1].split("\n};", 1)[0],
     )
-    if len(rows) != len(names):
-        print(f"table/name mismatch: {len(rows)} vs {len(names)}", file=sys.stderr)
+    if not rows or len(rows) != len(names):
+        print(f"table extraction failed: {len(rows)} data rows vs {len(names)} names", file=sys.stderr)
         return 1
 
     out = [
