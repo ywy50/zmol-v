@@ -52,8 +52,9 @@ def main(argv: list[str]) -> int:
             f".delta_from_result = {row[2]}, .var_rest = {flag(row[3])}" + " },"
         )
     out += ["};", "", "pub const known_ops: u16 = op_data.len;"]
-    Path("src/op_table.zig").write_text("\n".join(out) + "\n")
-    print(f"wrote src/op_table.zig with {len(rows)} entries")
+    target = Path(__file__).resolve().parent.parent / "src" / "op_table.zig"
+    target.write_text("\n".join(out) + "\n")
+    print(f"wrote {target} with {len(rows)} entries")
     return 0
 
 

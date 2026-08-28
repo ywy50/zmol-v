@@ -22,3 +22,27 @@ jobs:
         run: |
           sudo apt-get install -y shellcheck
           shellcheck tools/*.sh
+
+  analyze-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ziglang/zigsetup-action@v4
+        with:
+          zig-version: "0.16.0"
+      - name: Compile the library and run the test suite
+        run: |
+          zig build
+          zig build test --summary all
+
+  analyze-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ziglang/zigsetup-action@v4
+        with:
+          zig-version: "0.16.0"
+      - name: Compile the library and run the test suite
+        run: |
+          zig build
+          zig build test --summary all
